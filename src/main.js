@@ -21,19 +21,22 @@ class Game {
         document.getElementById('game-container').appendChild(this.renderer.domElement);
 
         // Lights
-        const amb = new THREE.AmbientLight(0x404040, 2); // Soft white light
-        this.scene.add(amb);
+        this.ambientLight = new THREE.AmbientLight(0x404040, 0.5); 
+        this.scene.add(this.ambientLight);
 
-        const dir = new THREE.DirectionalLight(0xffffff, 1);
-        dir.position.set(50, 50, 50);
-        dir.castShadow = true;
-        dir.shadow.camera.left = -50;
-        dir.shadow.camera.right = 50;
-        dir.shadow.camera.top = 50;
-        dir.shadow.camera.bottom = -50;
-        dir.shadow.mapSize.width = 2048;
-        dir.shadow.mapSize.height = 2048;
-        this.scene.add(dir);
+        this.sunLight = new THREE.DirectionalLight(0xffffff, 1);
+        this.sunLight.castShadow = true;
+        this.sunLight.shadow.camera.left = -50;
+        this.sunLight.shadow.camera.right = 50;
+        this.sunLight.shadow.camera.top = 50;
+        this.sunLight.shadow.camera.bottom = -50;
+        this.sunLight.shadow.mapSize.width = 2048;
+        this.sunLight.shadow.mapSize.height = 2048;
+        this.scene.add(this.sunLight);
+
+        // Day/Night State
+        this.timeOfDay = 0; // 0 to 1
+        this.dayDuration = 120; // Seconds for full cycle
 
         // Managers
         this.PlayerClass = Player;
@@ -62,15 +65,27 @@ class Game {
         this.players.forEach(p => this.scene.remove(p.mesh));
         this.players.clear();
 
-        this.world.generate(0);
+        // World generates dynamically now, just clear old chunks if any
+        this.world.chunks.forEach(c => this.scene.remove(c.mesh));
+        this.world.chunks.clear();
 
         this.localPlayer = new Player(this, true, id);
         this.scene.add(this.localPlayer.mesh);
         
-        // Find safe spawn?
-        const x = (Math.random() - 0.5) * 10;
-        const z = (Math.random() - 0.5) * 10;
-        this.localPlayer.mesh.position.set(x, 10, z);
+        // Safe spawn logic: Find a spot above water
+        let spawnY = 0;
+        let x = 0, z = 0;
+        for(let i=0; i<10; i++) {
+            x = (Math.random() - 0.5) * 100;
+            z = (Math.random() - 0.5) * 100;
+            const y = this.world.getHeightAt(x, z);
+            if(y > 2.5) {
+                spawnY = y + 2;
+                break;
+            }
+        }
+        
+        this.localPlayer.mesh.position.set(x, spawnY || 10, z);
         
         this.ui.showHUD();
         this.ui.updateStats(this.localPlayer.stats);
@@ -88,9 +103,36 @@ class Game {
         
         const dt = this.clock.getDelta();
 
+        // Day/Night Cycle
+        this.timeOfDay += dt / this.dayDuration;
+        if (this.timeOfDay > 1) this.timeOfDay = 0;
+
+        const angle = this.timeOfDay * Math.PI * 2;
+        // Sun moves in arc
+        const r = 50;
+        this.sunLight.position.set(Math.cos(angle) * r, Math.sin(angle) * r, 20);
+        this.sunLight.lookAt(0,0,0);
+
+        // Colors
+        const isNight = this.timeOfDay > 0.5;
+        let skyColor = new THREE.Color(0x87CEEB); // Day
+        if (this.timeOfDay > 0.45 && this.timeOfDay < 0.55) skyColor.setHex(0xffaa00); // Sunset
+        if (isNight) skyColor.setHex(0x111122); // Night
+
+        this.scene.background = skyColor;
+        this.scene.fog.color = skyColor;
+        this.ambientLight.intensity = isNight ? 0.1 : 0.5;
+        this.sunLight.intensity = isNight ? 0.0 : 1.0;
+
         if (this.localPlayer) {
             this.localPlayer.update(dt);
+            this.world.update(this.localPlayer.mesh.position);
             
+            // Keep sun shadow camera near player
+            this.sunLight.position.add(this.localPlayer.mesh.position);
+            this.sunLight.target.position.copy(this.localPlayer.mesh.position);
+            this.sunLight.target.updateMatrixWorld();
+
             // Network Broadcast (Throttle to 20hz)
             this.lastBroadcast += dt;
             if (this.lastBroadcast > 0.05) {

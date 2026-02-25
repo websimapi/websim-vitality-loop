@@ -11,25 +11,76 @@ export class Player {
         // Group for mesh
         this.mesh = new THREE.Group();
         
-        // Visual Body
-        const geometry = new THREE.CapsuleGeometry(0.4, 1.6, 4, 8);
-        const mat = new THREE.MeshStandardMaterial({ 
-            color: isLocal ? 0x00ff00 : 0xffaaaa,
-            roughness: 0.7 
-        });
-        this.body = new THREE.Mesh(geometry, mat);
-        this.body.position.y = 0.8;
-        this.body.castShadow = true;
-        this.body.receiveShadow = true;
-        this.mesh.add(this.body);
+        // Visual Body (Humanoid)
+        this.bodyGroup = new THREE.Group();
+        this.mesh.add(this.bodyGroup);
 
-        // Weapon
-        const wGeo = new THREE.BoxGeometry(0.1, 0.1, 1.0);
-        const wMat = new THREE.MeshStandardMaterial({ color: 0x888888 });
-        this.weapon = new THREE.Mesh(wGeo, wMat);
-        this.weapon.position.set(0.4, 1.0, 0.4);
-        this.weapon.castShadow = true;
-        this.mesh.add(this.weapon);
+        const color = isLocal ? 0x00ff00 : 0xffaaaa;
+        const mat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.7 });
+        const jointMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+
+        // Head
+        this.head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.35, 0.35), mat);
+        this.head.position.y = 1.65;
+        this.head.castShadow = true;
+        this.bodyGroup.add(this.head);
+
+        // Torso
+        this.torso = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 0.3), mat);
+        this.torso.position.y = 1.15;
+        this.torso.castShadow = true;
+        this.bodyGroup.add(this.torso);
+
+        // Arms
+        this.lArm = new THREE.Group();
+        this.lArm.position.set(-0.35, 1.4, 0);
+        const lArmMesh = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.6, 0.15), mat);
+        lArmMesh.position.y = -0.3;
+        lArmMesh.castShadow = true;
+        this.lArm.add(lArmMesh);
+        this.bodyGroup.add(this.lArm);
+
+        this.rArm = new THREE.Group();
+        this.rArm.position.set(0.35, 1.4, 0);
+        const rArmMesh = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.6, 0.15), mat);
+        rArmMesh.position.y = -0.3;
+        rArmMesh.castShadow = true;
+        this.rArm.add(rArmMesh);
+        this.bodyGroup.add(this.rArm);
+
+        // Legs
+        this.lLeg = new THREE.Group();
+        this.lLeg.position.set(-0.15, 0.8, 0);
+        const lLegMesh = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.8, 0.18), mat);
+        lLegMesh.position.y = -0.4;
+        lLegMesh.castShadow = true;
+        this.lLeg.add(lLegMesh);
+        this.bodyGroup.add(this.lLeg);
+
+        this.rLeg = new THREE.Group();
+        this.rLeg.position.set(0.15, 0.8, 0);
+        const rLegMesh = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.8, 0.18), mat);
+        rLegMesh.position.y = -0.4;
+        rLegMesh.castShadow = true;
+        this.rLeg.add(rLegMesh);
+        this.bodyGroup.add(this.rLeg);
+
+        // Weapon (Attached to Right Arm)
+        const wGeo = new THREE.BoxGeometry(0.08, 0.8, 0.08); // Sword blade
+        const wMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.8, roughness: 0.2 });
+        this.weapon = new THREE.Group();
+        
+        const blade = new THREE.Mesh(wGeo, wMat);
+        blade.position.y = 0.5;
+        this.weapon.add(blade);
+        
+        const guard = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.05, 0.1), new THREE.MeshStandardMaterial({color:0x444444}));
+        guard.position.y = 0.1;
+        this.weapon.add(guard);
+        
+        this.weapon.position.set(0, -0.5, 0.2);
+        this.weapon.rotation.x = Math.PI / 2; // Holding forward
+        this.rArm.add(this.weapon);
 
         // State
         this.speed = 8;
@@ -49,15 +100,43 @@ export class Player {
         }
 
         // Animation / Visuals
+        this.animateBody(dt);
+    }
+
+    animateBody(dt) {
+        // Attack Animation
         if (this.attackCooldown > 0) {
             this.attackCooldown -= dt;
-            // Swing animation
             const progress = 1.0 - (this.attackCooldown / 0.4);
-            if (progress < 1.0) {
-                this.weapon.rotation.x = -Math.PI * Math.sin(progress * Math.PI);
-            } else {
-                this.weapon.rotation.x = 0;
+            // Swing Arm
+            this.rArm.rotation.x = -Math.PI/2 + (-Math.PI/2 * Math.sin(progress * Math.PI));
+        } else {
+            // Idle/Run Arm
+            this.rArm.rotation.x = Math.PI * 0.05; // Slightly relaxed
+        }
+
+        // Walk Cycle
+        const velocityLen = new THREE.Vector2(this.mesh.position.x, this.mesh.position.z)
+            .distanceTo(new THREE.Vector2(this.lastX || this.mesh.position.x, this.lastZ || this.mesh.position.z));
+        
+        this.lastX = this.mesh.position.x;
+        this.lastZ = this.mesh.position.z;
+
+        if (velocityLen > 0.01) {
+            const time = Date.now() * 0.01;
+            this.lLeg.rotation.x = Math.sin(time) * 0.5;
+            this.rLeg.rotation.x = Math.sin(time + Math.PI) * 0.5;
+            
+            // Arms opposite to legs
+            this.lArm.rotation.x = Math.sin(time + Math.PI) * 0.3;
+            if (this.attackCooldown <= 0) {
+                 this.rArm.rotation.x = Math.sin(time) * 0.3;
             }
+        } else {
+            // Reset limbs
+            this.lLeg.rotation.x = THREE.MathUtils.lerp(this.lLeg.rotation.x, 0, dt * 10);
+            this.rLeg.rotation.x = THREE.MathUtils.lerp(this.rLeg.rotation.x, 0, dt * 10);
+            this.lArm.rotation.x = THREE.MathUtils.lerp(this.lArm.rotation.x, 0, dt * 10);
         }
     }
 

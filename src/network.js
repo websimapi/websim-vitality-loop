@@ -21,12 +21,6 @@ export class NetworkManager {
                 this.game.localPlayer.id = id;
             }
 
-            if (this.isHost) {
-                // Generate QR
-                QRCode.toDataURL(id, (err, url) => {
-                    if (!err) this.game.ui.showQR(url);
-                });
-            }
         });
 
         this.peer.on('connection', (conn) => {
@@ -38,21 +32,31 @@ export class NetworkManager {
 
     host() {
         this.isHost = true;
-        this.init(); // Auto-gen ID
-        this.game.startLocalGame(true, 'HOST');
+        this.peer = new Peer();
+        this.peer.on('open', (id) => {
+            console.log('Host initialized:', id);
+            this.game.ui.updateNetworkStatus('Hosting', id);
+            QRCode.toDataURL(id, (err, url) => {
+                if (!err) this.game.ui.showQR(url);
+            });
+            this.game.localPlayer.id = id;
+            this.game.startLocalGame(true, id);
+        });
+        
+        this.peer.on('connection', (conn) => this.handleConnection(conn));
+        this.peer.on('error', (err) => console.error(err));
     }
 
     join(hostId) {
         this.isHost = false;
-        this.init(); 
-        // Connect to host
-        // We need to wait for our own ID before connecting usually, 
-        // but PeerJS handles queuing slightly. Safer to wait for 'open' ideally but specific flow here:
+        this.peer = new Peer();
         this.peer.on('open', (myId) => {
             const conn = this.peer.connect(hostId);
             this.handleConnection(conn);
             this.game.startLocalGame(false, myId);
         });
+        this.peer.on('connection', (conn) => this.handleConnection(conn));
+        this.peer.on('error', (err) => console.error(err));
     }
 
     handleConnection(conn) {
