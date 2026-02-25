@@ -9,34 +9,41 @@ class Game {
     constructor() {
         // Init Three.js
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x111111);
-        this.scene.fog = new THREE.Fog(0x111111, 20, 60);
+        this.scene.background = new THREE.Color(0x87CEEB);
+        this.scene.fog = new THREE.FogExp2(0x87CEEB, 0.015);
 
         this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
         this.camera.position.set(0, 20, 20);
 
-        this.renderer = new THREE.WebGLRenderer({ antialias: true });
+        this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.renderer.shadowMap.enabled = true;
+        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        this.renderer.toneMappingExposure = 1.0;
+        
         document.getElementById('game-container').appendChild(this.renderer.domElement);
 
         // Lights
-        this.ambientLight = new THREE.AmbientLight(0x404040, 0.5); 
+        this.ambientLight = new THREE.AmbientLight(0x404040, 0.4); 
         this.scene.add(this.ambientLight);
 
-        this.sunLight = new THREE.DirectionalLight(0xffffff, 1);
+        this.sunLight = new THREE.DirectionalLight(0xffffff, 1.2);
+        this.sunLight.position.set(50, 100, 50);
         this.sunLight.castShadow = true;
-        this.sunLight.shadow.camera.left = -50;
-        this.sunLight.shadow.camera.right = 50;
-        this.sunLight.shadow.camera.top = 50;
-        this.sunLight.shadow.camera.bottom = -50;
+        this.sunLight.shadow.bias = -0.0005;
+        this.sunLight.shadow.camera.left = -60;
+        this.sunLight.shadow.camera.right = 60;
+        this.sunLight.shadow.camera.top = 60;
+        this.sunLight.shadow.camera.bottom = -60;
         this.sunLight.shadow.mapSize.width = 2048;
         this.sunLight.shadow.mapSize.height = 2048;
         this.scene.add(this.sunLight);
+        this.scene.add(this.sunLight.target);
 
         // Day/Night State
-        this.timeOfDay = 0; // 0 to 1
-        this.dayDuration = 120; // Seconds for full cycle
+        this.timeOfDay = 0.2; // Start in morning
+        this.dayDuration = 240; // Slower day
 
         // Managers
         this.PlayerClass = Player;

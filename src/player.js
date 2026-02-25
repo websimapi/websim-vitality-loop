@@ -11,76 +11,99 @@ export class Player {
         // Group for mesh
         this.mesh = new THREE.Group();
         
-        // Visual Body (Humanoid)
+        // Detailed Humanoid Body Construction
         this.bodyGroup = new THREE.Group();
         this.mesh.add(this.bodyGroup);
 
-        const color = isLocal ? 0x00ff00 : 0xffaaaa;
-        const mat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.7 });
-        const jointMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+        // Materials
+        const armorColor = isLocal ? 0x222222 : 0x442222;
+        const highlightColor = isLocal ? 0x00ff00 : 0xff0000;
+        
+        const matArmor = new THREE.MeshStandardMaterial({ color: armorColor, roughness: 0.4, metalness: 0.8 });
+        const matJoint = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 });
+        const matSkin = new THREE.MeshStandardMaterial({ color: 0xAA8866, roughness: 0.8 });
+        const matGlow = new THREE.MeshBasicMaterial({ color: highlightColor });
 
-        // Head
-        this.head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.35, 0.35), mat);
-        this.head.position.y = 1.65;
-        this.head.castShadow = true;
-        this.bodyGroup.add(this.head);
-
-        // Torso
-        this.torso = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 0.3), mat);
-        this.torso.position.y = 1.15;
-        this.torso.castShadow = true;
+        // -- Torso --
+        this.torso = new THREE.Group();
+        this.torso.position.y = 1.0;
         this.bodyGroup.add(this.torso);
 
-        // Arms
-        this.lArm = new THREE.Group();
-        this.lArm.position.set(-0.35, 1.4, 0);
-        const lArmMesh = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.6, 0.15), mat);
-        lArmMesh.position.y = -0.3;
-        lArmMesh.castShadow = true;
-        this.lArm.add(lArmMesh);
-        this.bodyGroup.add(this.lArm);
+        // Chest Plate
+        const chest = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.25), matArmor);
+        chest.position.y = 0.25;
+        chest.castShadow = true;
+        this.torso.add(chest);
 
-        this.rArm = new THREE.Group();
-        this.rArm.position.set(0.35, 1.4, 0);
-        const rArmMesh = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.6, 0.15), mat);
-        rArmMesh.position.y = -0.3;
-        rArmMesh.castShadow = true;
-        this.rArm.add(rArmMesh);
-        this.bodyGroup.add(this.rArm);
+        // Abdomen (Spine)
+        const abdomen = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.2, 0.2), matJoint);
+        abdomen.position.y = -0.05;
+        this.torso.add(abdomen);
 
-        // Legs
-        this.lLeg = new THREE.Group();
-        this.lLeg.position.set(-0.15, 0.8, 0);
-        const lLegMesh = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.8, 0.18), mat);
-        lLegMesh.position.y = -0.4;
-        lLegMesh.castShadow = true;
-        this.lLeg.add(lLegMesh);
-        this.bodyGroup.add(this.lLeg);
+        // Hips
+        const hips = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.2, 0.22), matArmor);
+        hips.position.y = -0.25;
+        this.torso.add(hips);
 
-        this.rLeg = new THREE.Group();
-        this.rLeg.position.set(0.15, 0.8, 0);
-        const rLegMesh = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.8, 0.18), mat);
-        rLegMesh.position.y = -0.4;
-        rLegMesh.castShadow = true;
-        this.rLeg.add(rLegMesh);
-        this.bodyGroup.add(this.rLeg);
+        // -- Head --
+        this.headGroup = new THREE.Group();
+        this.headGroup.position.y = 0.5;
+        this.torso.add(this.headGroup);
 
-        // Weapon (Attached to Right Arm)
-        const wGeo = new THREE.BoxGeometry(0.08, 0.8, 0.08); // Sword blade
-        const wMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.8, roughness: 0.2 });
+        const headMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.3, 0.28), matArmor);
+        headMesh.castShadow = true;
+        this.headGroup.add(headMesh);
+        
+        // Visor/Eyes
+        const visor = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.05, 0.2), matGlow);
+        visor.position.set(0, 0.02, 0.1);
+        this.headGroup.add(visor);
+
+        // -- Arms --
+        this.lArm = this.createLimb(matArmor, matJoint, true);
+        this.lArm.position.set(-0.25, 0.4, 0);
+        this.torso.add(this.lArm);
+
+        this.rArm = this.createLimb(matArmor, matJoint, true);
+        this.rArm.position.set(0.25, 0.4, 0);
+        this.torso.add(this.rArm);
+
+        // -- Legs --
+        this.lLeg = this.createLimb(matArmor, matJoint, false);
+        this.lLeg.position.set(-0.12, -0.35, 0);
+        this.torso.add(this.lLeg);
+
+        this.rLeg = this.createLimb(matArmor, matJoint, false);
+        this.rLeg.position.set(0.12, -0.35, 0);
+        this.torso.add(this.rLeg);
+
+        // -- Weapon --
         this.weapon = new THREE.Group();
-        
-        const blade = new THREE.Mesh(wGeo, wMat);
-        blade.position.y = 0.5;
-        this.weapon.add(blade);
-        
-        const guard = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.05, 0.1), new THREE.MeshStandardMaterial({color:0x444444}));
-        guard.position.y = 0.1;
+        // Hilt
+        const hilt = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.25), new THREE.MeshStandardMaterial({color: 0x443322}));
+        hilt.rotation.x = Math.PI/2;
+        this.weapon.add(hilt);
+        // Guard
+        const guard = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.05, 0.1), new THREE.MeshStandardMaterial({color: 0x888888, metalness: 0.9}));
+        guard.position.z = 0.12;
         this.weapon.add(guard);
+        // Blade
+        const bladeGeo = new THREE.BoxGeometry(0.1, 0.02, 1.2); // Long blade
+        const bladeMat = new THREE.MeshStandardMaterial({color: 0xffffff, metalness: 0.9, roughness: 0.2});
+        const blade = new THREE.Mesh(bladeGeo, bladeMat);
+        blade.position.z = 0.75;
+        blade.rotation.y = Math.PI/2;
+        blade.castShadow = true;
+        this.weapon.add(blade);
+
+        // Attach weapon to right hand (lower arm end)
+        // Hand is at y = -0.3 of lower arm
+        this.weapon.position.set(0, -0.3, 0.15); 
+        this.weapon.rotation.x = -Math.PI/2; // Point forward
         
-        this.weapon.position.set(0, -0.5, 0.2);
-        this.weapon.rotation.x = Math.PI / 2; // Holding forward
-        this.rArm.add(this.weapon);
+        // Find Right Arm Lower Segment
+        const rLowerArm = this.rArm.children.find(c => c.name === 'lower');
+        if (rLowerArm) rLowerArm.add(this.weapon);
 
         // State
         this.speed = 8;
@@ -103,40 +126,98 @@ export class Player {
         this.animateBody(dt);
     }
 
+    createLimb(matArmor, matJoint, isArm) {
+        const group = new THREE.Group();
+        
+        // Shoulder/Hip Joint
+        const joint = new THREE.Mesh(new THREE.SphereGeometry(0.09), matJoint);
+        group.add(joint);
+
+        // Upper Limb
+        const upperLen = isArm ? 0.3 : 0.4;
+        const upper = new THREE.Mesh(new THREE.BoxGeometry(0.12, upperLen, 0.12), matArmor);
+        upper.position.y = -upperLen / 2;
+        upper.castShadow = true;
+        group.add(upper);
+
+        // Elbow/Knee
+        const midJoint = new THREE.Mesh(new THREE.SphereGeometry(0.08), matJoint);
+        midJoint.position.y = -upperLen;
+        group.add(midJoint);
+
+        // Lower Limb Group (for bending)
+        const lowerGroup = new THREE.Group();
+        lowerGroup.name = 'lower';
+        lowerGroup.position.y = -upperLen;
+        group.add(lowerGroup);
+
+        const lowerLen = isArm ? 0.3 : 0.4;
+        const lower = new THREE.Mesh(new THREE.BoxGeometry(0.1, lowerLen, 0.1), matArmor);
+        lower.position.y = -lowerLen / 2;
+        lower.castShadow = true;
+        lowerGroup.add(lower);
+
+        return group;
+    }
+
     animateBody(dt) {
+        // Base Rotation
+        this.torso.rotation.y = 0;
+
         // Attack Animation
         if (this.attackCooldown > 0) {
             this.attackCooldown -= dt;
             const progress = 1.0 - (this.attackCooldown / 0.4);
+            const swing = Math.sin(progress * Math.PI);
+            
+            // Torso Twist
+            this.torso.rotation.y = -Math.PI * 0.2 * swing;
+            
             // Swing Arm
-            this.rArm.rotation.x = -Math.PI/2 + (-Math.PI/2 * Math.sin(progress * Math.PI));
+            this.rArm.rotation.x = -Math.PI * 0.8 * swing;
+            this.rArm.rotation.z = Math.PI * 0.2 * swing;
         } else {
-            // Idle/Run Arm
-            this.rArm.rotation.x = Math.PI * 0.05; // Slightly relaxed
+            this.rArm.rotation.x = THREE.MathUtils.lerp(this.rArm.rotation.x, 0, dt * 5);
+            this.rArm.rotation.z = THREE.MathUtils.lerp(this.rArm.rotation.z, 0, dt * 5);
         }
 
         // Walk Cycle
-        const velocityLen = new THREE.Vector2(this.mesh.position.x, this.mesh.position.z)
-            .distanceTo(new THREE.Vector2(this.lastX || this.mesh.position.x, this.lastZ || this.mesh.position.z));
+        const dx = this.mesh.position.x - (this.lastX || this.mesh.position.x);
+        const dz = this.mesh.position.z - (this.lastZ || this.mesh.position.z);
+        const velocity = Math.sqrt(dx*dx + dz*dz) / dt;
         
         this.lastX = this.mesh.position.x;
         this.lastZ = this.mesh.position.z;
 
-        if (velocityLen > 0.01) {
-            const time = Date.now() * 0.01;
-            this.lLeg.rotation.x = Math.sin(time) * 0.5;
-            this.rLeg.rotation.x = Math.sin(time + Math.PI) * 0.5;
+        if (velocity > 0.1) {
+            const time = Date.now() * 0.015;
             
+            this.lLeg.rotation.x = Math.sin(time) * 0.6;
+            this.rLeg.rotation.x = Math.sin(time + Math.PI) * 0.6;
+            
+            // Knee bending
+            this.lLeg.children.find(c=>c.name==='lower').rotation.x = Math.max(0, Math.sin(time + Math.PI/2));
+            this.rLeg.children.find(c=>c.name==='lower').rotation.x = Math.max(0, Math.sin(time + Math.PI + Math.PI/2));
+
             // Arms opposite to legs
-            this.lArm.rotation.x = Math.sin(time + Math.PI) * 0.3;
+            this.lArm.rotation.x = Math.sin(time + Math.PI) * 0.4;
             if (this.attackCooldown <= 0) {
-                 this.rArm.rotation.x = Math.sin(time) * 0.3;
+                 this.rArm.rotation.x = Math.sin(time) * 0.4;
             }
+            
+            // Bobbing
+            this.bodyGroup.position.y = Math.sin(time * 2) * 0.05;
         } else {
-            // Reset limbs
+            // Idle
             this.lLeg.rotation.x = THREE.MathUtils.lerp(this.lLeg.rotation.x, 0, dt * 10);
             this.rLeg.rotation.x = THREE.MathUtils.lerp(this.rLeg.rotation.x, 0, dt * 10);
             this.lArm.rotation.x = THREE.MathUtils.lerp(this.lArm.rotation.x, 0, dt * 10);
+            this.bodyGroup.position.y = THREE.MathUtils.lerp(this.bodyGroup.position.y, 0, dt * 5);
+            
+            const kneeL = this.lLeg.children.find(c=>c.name==='lower');
+            if(kneeL) kneeL.rotation.x = THREE.MathUtils.lerp(kneeL.rotation.x, 0, dt * 10);
+            const kneeR = this.rLeg.children.find(c=>c.name==='lower');
+            if(kneeR) kneeR.rotation.x = THREE.MathUtils.lerp(kneeR.rotation.x, 0, dt * 10);
         }
     }
 

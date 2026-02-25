@@ -39,7 +39,6 @@ export class NetworkManager {
             QRCode.toDataURL(id, (err, url) => {
                 if (!err) this.game.ui.showQR(url);
             });
-            this.game.localPlayer.id = id;
             this.game.startLocalGame(true, id);
         });
         
@@ -98,9 +97,12 @@ export class NetworkManager {
                 this.game.players.set(pData.id, remote);
             }
             
-            remote.position.set(pData.x, pData.y, pData.z);
-            remote.rotation = pData.rot;
-            remote.stats.currentHp = pData.hp; // Visual update
+            // Update mesh position, not the class instance
+            if (remote.mesh) {
+                remote.mesh.position.set(pData.x, pData.y, pData.z);
+                remote.mesh.rotation.y = pData.rot;
+            }
+            remote.stats.currentHp = pData.hp;
         }
 
         if (data.type === 'HIT') {
