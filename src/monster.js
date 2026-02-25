@@ -1,99 +1,31 @@
 import * as THREE from 'three';
 
-export const MONSTER_TYPES = {
-    GOBLIN: {
-        name: 'Goblin',
-        hp: 30,
-        speed: 5.0,
-        dmg: 5,
-        scale: 0.7,
-        color: 0x44aa44,
-        geo: 'box'
-    },
-    ORC: {
-        name: 'Orc',
-        hp: 100,
-        speed: 2.5,
-        dmg: 15,
-        scale: 1.2,
-        color: 0x226622,
-        geo: 'dodeca'
-    },
-    SKELETON: {
-        name: 'Skeleton',
-        hp: 50,
-        speed: 3.5,
-        dmg: 10,
-        scale: 0.9,
-        color: 0xdddddd,
-        geo: 'cylinder'
-    },
-    BOSS: {
-        name: 'Dungeon Lord',
-        hp: 500,
-        speed: 4.0,
-        dmg: 30,
-        scale: 2.5,
-        color: 0xaa0000,
-        geo: 'torus'
-    }
-};
-
 export class Monster {
     constructor(game, id, x, y, z) {
         this.game = game;
         this.id = id;
-        
-        // Determine Type from ID (format: "mob_TYPE_x_z_i")
-        // Default to ORC if unknown
-        this.typeKey = 'ORC';
-        if (id.includes('GOBLIN')) this.typeKey = 'GOBLIN';
-        else if (id.includes('SKELETON')) this.typeKey = 'SKELETON';
-        else if (id.includes('BOSS')) this.typeKey = 'BOSS';
-        
-        const stats = MONSTER_TYPES[this.typeKey];
-
-        this.hp = stats.hp;
-        this.maxHp = stats.hp;
-        this.damage = stats.dmg;
-        this.speed = stats.speed;
+        this.hp = 50;
+        this.maxHp = 50;
         this.dead = false;
         
         // Mesh
         this.mesh = new THREE.Group();
         this.mesh.position.set(x, y, z);
         
-        const matBody = new THREE.MeshStandardMaterial({ color: stats.color, roughness: 0.3 });
-        let geoBody;
-        
-        if (stats.geo === 'box') geoBody = new THREE.BoxGeometry(0.6, 0.8, 0.6);
-        else if (stats.geo === 'cylinder') geoBody = new THREE.CylinderGeometry(0.3, 0.3, 1.2);
-        else if (stats.geo === 'torus') geoBody = new THREE.TorusKnotGeometry(0.4, 0.15, 64, 8);
-        else geoBody = new THREE.DodecahedronGeometry(0.6);
-
+        const matBody = new THREE.MeshStandardMaterial({ color: 0x880000, roughness: 0.3 });
+        const geoBody = new THREE.DodecahedronGeometry(0.6);
         this.body = new THREE.Mesh(geoBody, matBody);
-        this.body.position.y = 1.0 * stats.scale;
-        this.body.scale.setScalar(stats.scale);
+        this.body.position.y = 1.0;
         this.body.castShadow = true;
         this.mesh.add(this.body);
 
-        // Eyes
-        const eyeMat = new THREE.MeshBasicMaterial({color: 0xff0000});
-        const eye1 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), eyeMat);
-        eye1.position.set(0.15 * stats.scale, 1.2 * stats.scale, 0.4 * stats.scale);
-        this.body.add(eye1);
-        const eye2 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), eyeMat);
-        eye2.position.set(-0.15 * stats.scale, 1.2 * stats.scale, 0.4 * stats.scale);
-        this.body.add(eye2);
-
         // Health Bar
-        const barY = 2.2 * stats.scale;
-        const hpBg = new THREE.Mesh(new THREE.PlaneGeometry(1.2 * stats.scale, 0.15), new THREE.MeshBasicMaterial({color:0x000000}));
-        hpBg.position.y = barY;
+        const hpBg = new THREE.Mesh(new THREE.PlaneGeometry(1, 0.1), new THREE.MeshBasicMaterial({color:0x000000}));
+        hpBg.position.y = 2.2;
         this.mesh.add(hpBg);
         
-        this.hpBar = new THREE.Mesh(new THREE.PlaneGeometry(1.18 * stats.scale, 0.13), new THREE.MeshBasicMaterial({color:0xff0000}));
-        this.hpBar.position.y = barY;
+        this.hpBar = new THREE.Mesh(new THREE.PlaneGeometry(0.98, 0.08), new THREE.MeshBasicMaterial({color:0xff0000}));
+        this.hpBar.position.y = 2.2;
         this.hpBar.position.z = 0.01;
         this.mesh.add(this.hpBar);
         
@@ -101,6 +33,7 @@ export class Monster {
 
         // State
         this.target = null;
+        this.speed = 3.5;
         this.attackCooldown = 0;
         this.state = 'IDLE'; // IDLE, CHASE, ATTACK
     }
@@ -174,15 +107,16 @@ export class Monster {
         
         // Attack hit
         this.attackCooldown = 1.5;
+        // Host deals damage directly? Or sends hit? 
+        // Host authoritative: Host calculates hit, sends state.
+        // Actually, for simplicity, Host tells target they took damage.
         
-        // Visual Lung
-        this.body.position.z += 0.5;
-        setTimeout(() => this.body.position.z -= 0.5, 200);
-
         if (target === this.game.localPlayer) {
-            target.takeDamage(this.damage);
+            target.takeDamage(10);
         } else {
-            this.game.network.sendHit(target.id, this.damage);
+            // Remote player hit, we can't force damage easily without complex net code.
+            // We'll trust the Host sends a 'HIT' packet to that client.
+            this.game.network.sendHit(target.id, 10);
         }
     }
 
@@ -194,15 +128,16 @@ export class Monster {
         }
     }
 
-    die() {
+    die(broadcast = true) {
         this.dead = true;
         this.mesh.visible = false;
         
-        // Spawn Loot (Host Only logic mostly, but we can spawn locally for visual if sync is hard)
-        // Ideally Host broadcasts "Monster Died at X,Y,Z, dropped Item ID"
-        if (this.game.network.isHost) {
-            this.game.spawnLoot(this.mesh.position);
+        if (this.game.network.isHost && broadcast) {
+            const key = this.game.spawnLoot(this.mesh.position);
             this.game.network.broadcastMonsterDeath(this.id);
+            if (key) {
+                this.game.network.broadcastLoot(this.mesh.position, key);
+            }
         }
     }
 }

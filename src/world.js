@@ -17,7 +17,6 @@ export class World {
         this.noise2D = createNoise2D(); 
         
         // Textures
-        const loader = new THREE.TextureLoader();
         
         const grassTex = loader.load('./texture_grass.png');
         grassTex.wrapS = THREE.RepeatWrapping;
@@ -151,32 +150,25 @@ export class World {
     spawnMonster(chunk, cx, cz, rng) {
         if (!this.game.network.isHost) return; // Only host spawns logic entities
 
-        const count = 1 + Math.floor(rng() * 4); // Increased spawns
+        const count = 1 + Math.floor(rng() * 3);
         for(let i=0; i<count; i++) {
-            const rx = (rng() - 0.5) * 40;
-            const rz = (rng() - 0.5) * 40;
+            const rx = (rng() - 0.5) * 30;
+            const rz = (rng() - 0.5) * 30;
             const wx = cx * this.chunkSize + this.chunkSize/2 + rx;
             const wz = cz * this.chunkSize + this.chunkSize/2 + rz;
             const wy = this.getHeightAt(wx, wz);
             
             if (wy < 4.5) continue;
 
-            // Determine Type based on RNG or Biome
-            let type = 'GOBLIN';
-            const r = rng();
-            if (r > 0.95) type = 'BOSS'; // Rare
-            else if (r > 0.7) type = 'ORC';
-            else if (r > 0.4) type = 'SKELETON';
-
             // Create Monster Entity
-            const id = `mob_${type}_${cx}_${cz}_${i}`;
+            const id = `mob_${cx}_${cz}_${i}`;
             // Check if exists
             if (this.game.monsters.find(m => m.id === id)) continue;
 
             const m = new Monster(this.game, id, wx, wy, wz);
             this.game.scene.add(m.mesh);
             this.game.monsters.push(m);
-            chunk.props.push(m.mesh); 
+            chunk.props.push(m.mesh); // Track mesh for unloading? careful, logic entity stays in array
         }
     }
 
@@ -190,69 +182,33 @@ export class World {
         const group = new THREE.Group();
         group.position.set(wx, wy, wz);
         
-        // Ruined Castle / Dungeon Exterior
-        const w = 8;
-        const h = 6;
+        // Archway
+        const w = 4;
+        const h = 5;
+        const d = 2;
         
-        // Base Block
-        const base = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), this.matWall);
-        base.position.y = h/2;
-        base.castShadow = true;
-        group.add(base);
-
-        // Turrets
-        const turretGeo = new THREE.CylinderGeometry(1, 1, h+2);
-        const t1 = new THREE.Mesh(turretGeo, this.matWall);
-        t1.position.set(-w/2, h/2+1, -w/2);
-        group.add(t1);
-        const t2 = new THREE.Mesh(turretGeo, this.matWall);
-        t2.position.set(w/2, h/2+1, -w/2);
-        group.add(t2);
-
-        // Entrance Arch
-        const doorFrame = new THREE.Mesh(new THREE.BoxGeometry(3, 4, 1), new THREE.MeshStandardMaterial({color:0x111111}));
-        doorFrame.position.set(0, 2, w/2 + 0.1);
-        group.add(doorFrame);
+        const left = new THREE.Mesh(new THREE.BoxGeometry(1, h, d), this.matWall);
+        left.position.set(-w/2, h/2, 0);
+        group.add(left);
         
-        // Black Void
-        const voidMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 3), new THREE.MeshBasicMaterial({color: 0x000000}));
-        voidMesh.position.set(0, 1.5, w/2 + 0.6);
+        const right = new THREE.Mesh(new THREE.BoxGeometry(1, h, d), this.matWall);
+        right.position.set(w/2, h/2, 0);
+        group.add(right);
+        
+        const top = new THREE.Mesh(new THREE.BoxGeometry(w+2, 1, d), this.matWall);
+        top.position.set(0, h, 0);
+        group.add(top);
+        
+        // Dark Void
+        const voidMesh = new THREE.Mesh(new THREE.PlaneGeometry(w-1, h-1), new THREE.MeshBasicMaterial({color: 0x000000}));
+        voidMesh.position.set(0, h/2, 0.2);
         group.add(voidMesh);
-
-        // Torches
-        const torchGeo = new THREE.BoxGeometry(0.2, 0.5, 0.2);
-        const torchMat = new THREE.MeshBasicMaterial({color: 0xff5500});
-        const torch1 = new THREE.Mesh(torchGeo, torchMat);
-        torch1.position.set(-2, 3, w/2+0.5);
-        group.add(torch1);
-        const light1 = new THREE.PointLight(0xff5500, 1, 10);
-        light1.position.copy(torch1.position);
-        group.add(light1);
-
-        const torch2 = new THREE.Mesh(torchGeo, torchMat);
-        torch2.position.set(2, 3, w/2+0.5);
-        group.add(torch2);
-        const light2 = new THREE.PointLight(0xff5500, 1, 10);
-        light2.position.copy(torch2.position);
-        group.add(light2);
 
         this.game.scene.add(group);
         chunk.props.push(group);
         
-        // Spawn Dungeon Guardians
-        if (this.game.network.isHost) {
-            for(let i=0; i<3; i++) {
-                const id = `mob_SKELETON_dng_${cx}_${cz}_${i}`;
-                if (!this.game.monsters.find(m => m.id === id)) {
-                    const gx = wx + (Math.random()-0.5)*10;
-                    const gz = wz + 5 + Math.random()*5;
-                    const m = new Monster(this.game, id, gx, wy, gz);
-                    this.game.scene.add(m.mesh);
-                    this.game.monsters.push(m);
-                    chunk.props.push(m.mesh);
-                }
-            }
-        }
+        // Spawn extra monsters around dungeon
+        // ...
     }
 
     generateTown(chunk, cx, cz, rng) {

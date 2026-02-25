@@ -176,14 +176,13 @@ class Game {
         this.renderer.render(this.scene, this.camera);
     }
 
-    spawnLoot(pos) {
-        // Random loot weighted
+    spawnLoot(pos, itemKey = null) {
+        // Random loot if not specified
         const keys = Object.keys(ITEMS);
-        // Simple weighted RNG: Consumables more common
-        let key = keys[Math.floor(Math.random() * keys.length)];
-        if (Math.random() > 0.7) key = 'POTION_HP'; // 30% bonus chance for pots
-        
+        const key = itemKey || keys[Math.floor(Math.random() * keys.length)];
         const itemData = ITEMS[key];
+
+        if (!itemData) return null;
 
         const group = new THREE.Group();
         group.position.copy(pos);
@@ -196,9 +195,6 @@ class Game {
         mesh.rotation.x = Math.PI/4;
         mesh.rotation.z = Math.PI/4;
         group.add(mesh);
-        
-        // Text Label
-        // (Skipped for performance/complexity, color indicates type)
 
         // Glow
         const glow = new THREE.PointLight(itemData.color, 1, 3);
@@ -206,6 +202,7 @@ class Game {
 
         this.scene.add(group);
         this.loot.push({ mesh: group, data: itemData });
+        return key;
     }
 
     removeLoot(index) {

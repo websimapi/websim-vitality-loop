@@ -94,7 +94,27 @@ export class NetworkManager {
         this.connections.forEach(c => c.send({ type: 'MONSTERS', payload }));
     }
 
+    broadcastMonsterDeath(id) {
+        this.connections.forEach(c => c.send({ type: 'MONSTER_DEATH', id }));
+    }
+
+    broadcastLoot(pos, itemKey) {
+        this.connections.forEach(c => c.send({ type: 'LOOT', x: pos.x, y: pos.y, z: pos.z, key: itemKey }));
+    }
+
     processData(data, senderConn) {
+        if (data.type === 'MONSTER_DEATH') {
+            const m = this.game.monsters.find(mons => mons.id === data.id);
+            if (m) {
+                m.die(false);
+            }
+        }
+        
+        if (data.type === 'LOOT') {
+            const pos = new THREE.Vector3(data.x, data.y, data.z);
+            this.game.spawnLoot(pos, data.key);
+        }
+
         if (data.type === 'MONSTERS') {
             const updates = data.payload;
             updates.forEach(up => {

@@ -32,36 +32,19 @@ export class Inventory {
         if (item.type === ITEM_TYPES.CONSUMABLE) {
             if (item.effect) item.effect(this.player);
             this.slots[index] = null;
-            this.player.game.ui.refreshInventory();
         } else if (item.type === ITEM_TYPES.WEAPON) {
-            this.equipItem(index, 'weapon');
+            // Swap
+            const old = this.equipment.weapon;
+            this.equipment.weapon = item;
+            this.slots[index] = old;
+            this.player.updateEquipmentVisuals();
         } else if (item.type === ITEM_TYPES.ARMOR) {
-            this.equipItem(index, 'armor');
+            // Swap
+            const old = this.equipment.armor;
+            this.equipment.armor = item;
+            this.slots[index] = old;
+            this.player.updateEquipmentVisuals();
         }
-    }
-
-    equipItem(slotIndex, typeStr) {
-        const item = this.slots[slotIndex];
-        if (!item) return;
-        
-        // Check type match just in case
-        if (typeStr === 'weapon' && item.type !== ITEM_TYPES.WEAPON) return;
-        if (typeStr === 'armor' && item.type !== ITEM_TYPES.ARMOR) return;
-
-        const old = this.equipment[typeStr];
-        this.equipment[typeStr] = item;
-        this.slots[slotIndex] = old;
-        
-        this.player.updateEquipmentVisuals();
-        this.player.game.ui.refreshInventory();
-    }
-
-    moveItem(fromIdx, toIdx) {
-        if (fromIdx === toIdx) return;
-        
-        const temp = this.slots[toIdx];
-        this.slots[toIdx] = this.slots[fromIdx];
-        this.slots[fromIdx] = temp;
         
         this.player.game.ui.refreshInventory();
     }
