@@ -15,6 +15,12 @@ export class NetworkManager {
         this.peer.on('open', (id) => {
             console.log('My ID: ' + id);
             this.game.ui.updateNetworkStatus('Connected to Relay', id);
+            
+            // Update local player ID if we are already in game
+            if (this.game.localPlayer) {
+                this.game.localPlayer.id = id;
+            }
+
             if (this.isHost) {
                 // Generate QR
                 QRCode.toDataURL(id, (err, url) => {
