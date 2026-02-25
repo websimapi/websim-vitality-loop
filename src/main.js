@@ -4,6 +4,8 @@ import { UIManager } from './ui.js';
 import { NetworkManager } from './network.js';
 import { InputManager } from './input.js';
 import { Player } from './player.js';
+import { ITEMS } from './items.js';
+import { Monster } from './monster.js';
 
 class Game {
     constructor() {
@@ -47,12 +49,15 @@ class Game {
 
         // Managers
         this.PlayerClass = Player;
+        this.MonsterClass = Monster; // Exposed for Network
         this.world = new World(this);
         this.ui = new UIManager(this);
         this.network = new NetworkManager(this);
         this.input = new InputManager(this);
         
         this.players = new Map(); // Remote players
+        this.monsters = []; // Array of Monster instances
+        this.loot = []; // Array of dropped items { mesh, data }
         this.localPlayer = null;
 
         this.clock = new THREE.Clock();
@@ -152,11 +157,63 @@ class Game {
                     rot: this.localPlayer.mesh.rotation.y,
                     hp: this.localPlayer.stats.currentHp
                 });
+                
+                // If Host, broadcast monster states (simplified, just positions maybe?)
+                // For this prototype, we'll rely on deterministic(ish) behavior or local sim
+                // But let's sync monster positions if possible
+                if (this.network.isHost && this.monsters.length > 0) {
+                     this.network.broadcastMonsters(this.monsters);
+                }
             }
         }
+        
+        // Update Monsters
+        this.monsters.forEach(m => m.update(dt));
+        // Rotate Loot
+        this.loot.forEach(l => l.mesh.rotation.y += dt);
 
         this.players.forEach(p => p.update(dt));
         this.renderer.render(this.scene, this.camera);
+    }
+
+    spawnLoot(pos) {
+        // Random loot weighted
+        const keys = Object.keys(ITEMS);
+        // Simple weighted RNG: Consumables more common
+        let key = keys[Math.floor(Math.random() * keys.length)];
+        if (Math.random() > 0.7) key = 'POTION_HP'; // 30% bonus chance for pots
+        
+        const itemData = ITEMS[key];
+
+        const group = new THREE.Group();
+        group.position.copy(pos);
+        group.position.y = 1.0;
+
+        // Visual
+        const geo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
+        const mat = new THREE.MeshStandardMaterial({ color: itemData.color, metalness: 0.8, roughness: 0.2 });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.rotation.x = Math.PI/4;
+        mesh.rotation.z = Math.PI/4;
+        group.add(mesh);
+        
+        // Text Label
+        // (Skipped for performance/complexity, color indicates type)
+
+        // Glow
+        const glow = new THREE.PointLight(itemData.color, 1, 3);
+        group.add(glow);
+
+        this.scene.add(group);
+        this.loot.push({ mesh: group, data: itemData });
+    }
+
+    removeLoot(index) {
+        const item = this.loot[index];
+        if(item) {
+            this.scene.remove(item.mesh);
+            this.loot.splice(index, 1);
+        }
     }
 
     resize() {

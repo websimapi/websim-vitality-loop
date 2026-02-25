@@ -1,0 +1,6 @@
+updates.forEach(up => {
+                const m = this.game.monsters.find(mons => mons.id === up.id);
+                if (m) {
+                    // Update
+                }
+            });

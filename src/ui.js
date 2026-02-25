@@ -23,6 +23,122 @@ export class UIManager {
             this.game.localPlayer.position.set(0, 10, 0); // Respawn pos
             document.getElementById('death-screen').style.display = 'none';
         };
+
+        // Inventory
+        document.getElementById('inv-toggle-btn').onclick = () => this.toggleInventory();
+        document.getElementById('inv-close').onclick = () => this.toggleInventory();
+        
+        // (Click handlers removed here because they are dynamically assigned in updateEquipSlot now to handle state better)
+        
+        document.getElementById('pickup-btn').onclick = () => this.game.localPlayer.tryPickup();
+    }
+
+    toggleInventory() {
+        const el = document.getElementById('inventory-screen');
+        if (el.style.display === 'flex') {
+            el.style.display = 'none';
+        } else {
+            el.style.display = 'flex';
+            this.refreshInventory();
+        }
+    }
+
+    refreshInventory() {
+        if (!this.game.localPlayer) return;
+        const inv = this.game.localPlayer.inventory;
+        const grid = document.getElementById('inv-grid');
+        grid.innerHTML = '';
+
+        inv.slots.forEach((item, idx) => {
+            const slot = document.createElement('div');
+            slot.className = 'inv-slot';
+            slot.dataset.idx = idx;
+            
+            // Drag Events
+            slot.ondragover = (e) => { e.preventDefault(); slot.classList.add('drag-over'); };
+            slot.ondragleave = () => slot.classList.remove('drag-over');
+            slot.ondrop = (e) => {
+                e.preventDefault();
+                slot.classList.remove('drag-over');
+                const fromIdx = e.dataTransfer.getData('text/plain');
+                if (fromIdx !== '') {
+                    inv.moveItem(parseInt(fromIdx), idx);
+                }
+            };
+
+            if (item) {
+                const icon = document.createElement('div');
+                icon.className = 'inv-icon';
+                icon.style.color = '#' + item.color.toString(16).padStart(6, '0');
+                icon.innerText = item.icon || '📦';
+                icon.draggable = true;
+                
+                icon.ondragstart = (e) => {
+                    e.dataTransfer.setData('text/plain', idx);
+                    document.getElementById('item-desc').innerText = `Dragging ${item.name}...`;
+                };
+                
+                slot.appendChild(icon);
+                
+                slot.onclick = () => inv.useItem(idx);
+                slot.onmouseenter = () => {
+                    let stats = "";
+                    if (item.stats) {
+                        if(item.stats.dmg) stats = `[DMG: ${item.stats.dmg}]`;
+                        if(item.stats.def) stats = `[DEF: ${item.stats.def}]`;
+                    }
+                    document.getElementById('item-desc').innerText = `${item.name} ${stats}\n${item.desc}`;
+                    document.getElementById('item-desc').style.color = '#' + item.color.toString(16).padStart(6, '0');
+                };
+            }
+            grid.appendChild(slot);
+        });
+        
+        // Equip slots
+        this.updateEquipSlot('slot-weapon', inv.equipment.weapon, 'weapon');
+        this.updateEquipSlot('slot-armor', inv.equipment.armor, 'armor');
+    }
+
+    updateEquipSlot(domId, item, type) {
+        const el = document.getElementById(domId);
+        // Clear previous icon if any
+        const oldIcon = el.querySelector('.inv-icon');
+        if (oldIcon) oldIcon.remove();
+
+        el.style.borderColor = item ? '#' + item.color.toString(16) : '#444';
+        
+        el.ondragover = (e) => { e.preventDefault(); el.classList.add('drag-over'); };
+        el.ondragleave = () => el.classList.remove('drag-over');
+        el.ondrop = (e) => {
+            e.preventDefault();
+            el.classList.remove('drag-over');
+            const fromIdx = e.dataTransfer.getData('text/plain');
+            if (fromIdx !== '') {
+                this.game.localPlayer.inventory.equipItem(parseInt(fromIdx), type);
+            }
+        };
+
+        if (item) {
+            const icon = document.createElement('div');
+            icon.className = 'inv-icon';
+            icon.style.color = '#' + item.color.toString(16).padStart(6, '0');
+            icon.innerText = item.icon || '⚔️';
+            icon.onclick = () => this.game.localPlayer.inventory.unequip(type);
+            
+            // Hover info
+            icon.onmouseenter = () => {
+                 let stats = "";
+                 if(item.stats.dmg) stats = `[DMG: ${item.stats.dmg}]`;
+                 if(item.stats.def) stats = `[DEF: ${item.stats.def}]`;
+                 document.getElementById('item-desc').innerText = `${item.name} ${stats} (Equipped)`;
+            };
+            
+            el.appendChild(icon);
+        }
+    }
+
+    showPickupBtn(show) {
+        document.getElementById('pickup-btn').style.display = show ? 'block' : 'none';
     }
 
     hideLobby() {

@@ -83,7 +83,41 @@ export class NetworkManager {
         this.connections.forEach(c => c.send(packet));
     }
 
+    broadcastMonsters(monsters) {
+        // Heavy packet, optimize later
+        const payload = monsters.map(m => ({ 
+            id: m.id, 
+            x: m.mesh.position.x, 
+            z: m.mesh.position.z, 
+            hp: m.hp 
+        }));
+        this.connections.forEach(c => c.send({ type: 'MONSTERS', payload }));
+    }
+
     processData(data, senderConn) {
+        if (data.type === 'MONSTERS') {
+            const updates = data.payload;
+            updates.forEach(up => {
+                let m = this.game.monsters.find(mons => mons.id === up.id);
+                if (!m) {
+                    // Create visual proxy for monster on client
+                    // We use the same class but it won't run AI because isHost is false
+                    m = new this.game.MonsterClass(this.game, up.id, up.x, 0, up.z); 
+                    this.game.scene.add(m.mesh);
+                    this.game.monsters.push(m);
+                }
+                
+                // Sync Pos
+                m.mesh.position.x = THREE.MathUtils.lerp(m.mesh.position.x, up.x, 0.5);
+                m.mesh.position.z = THREE.MathUtils.lerp(m.mesh.position.z, up.z, 0.5);
+                m.hp = up.hp;
+                
+                // Ground clamp visual
+                const ground = this.game.world.getHeightAt(m.mesh.position.x, m.mesh.position.z);
+                m.mesh.position.y = ground;
+            });
+        }
+
         if (data.type === 'STATE') {
             const pData = data.payload;
             // Update remote player

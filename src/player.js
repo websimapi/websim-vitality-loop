@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Stats } from './stats.js';
+import { Inventory } from './inventory.js';
 
 export class Player {
     constructor(game, isLocal, id) {
@@ -7,6 +8,7 @@ export class Player {
         this.isLocal = isLocal;
         this.id = id;
         this.stats = new Stats();
+        this.inventory = new Inventory(this);
         
         // Group for mesh
         this.mesh = new THREE.Group();
@@ -117,13 +119,62 @@ export class Player {
         if (this.isLocal) {
             this.handleInput(dt);
             this.applyPhysics(dt);
+            this.checkLootInteraction();
         } else {
             // Remote players are updated via network lerping mostly
-            // But we can apply simple gravity if we want smooth movement
         }
 
         // Animation / Visuals
         this.animateBody(dt);
+    }
+
+    checkLootInteraction() {
+        // Check distance to nearby loot
+        let canPickup = false;
+        this.game.loot.forEach(item => {
+            if (item.mesh.position.distanceTo(this.mesh.position) < 2.0) {
+                canPickup = true;
+            }
+        });
+        this.game.ui.showPickupBtn(canPickup);
+    }
+
+    tryPickup() {
+        // Find nearest
+        let nearest = null;
+        let dist = 999;
+        let idx = -1;
+        
+        this.game.loot.forEach((item, i) => {
+            const d = item.mesh.position.distanceTo(this.mesh.position);
+            if (d < 2.0 && d < dist) {
+                dist = d;
+                nearest = item;
+                idx = i;
+            }
+        });
+
+        if (nearest) {
+            if (this.inventory.addItem(nearest.data)) {
+                // Success
+                this.game.removeLoot(idx);
+                const sfx = new Audio('/sound_loot.mp3');
+                sfx.play().catch(e=>{});
+            }
+        }
+    }
+
+    updateEquipmentVisuals() {
+        // Change weapon color or model based on inventory.equipment
+        // For now just color
+        if (this.weapon) {
+            const wMat = this.weapon.children[2].material; // Blade
+            if (this.inventory.equipment.weapon) {
+                wMat.color.setHex(this.inventory.equipment.weapon.color);
+            } else {
+                wMat.color.setHex(0xffffff); // Default
+            }
+        }
     }
 
     createLimb(matArmor, matJoint, isArm) {
@@ -283,24 +334,44 @@ export class Player {
     performAttack() {
         this.attackCooldown = 0.4; // 400ms swing
         
-        // Audio
         const sfx = new Audio('/sound_swing.mp3');
         sfx.volume = 0.4;
         sfx.play().catch(e=>{});
 
-        // Hit detection (Simple Box/Distance check)
-        // Check all other players
+        // Calculate Damage
+        let baseDmg = 10;
+        if (this.inventory) baseDmg += this.inventory.getDamageBonus();
+        const damage = baseDmg * this.stats.sEff;
+
+        // Hit detection Players
         this.game.players.forEach(remote => {
             const dist = this.mesh.position.distanceTo(remote.mesh.position);
-            if (dist < 2.5) { // Range
-                // Check angle (in front)
+            if (dist < 2.5) { 
                 const toTarget = remote.mesh.position.clone().sub(this.mesh.position).normalize();
                 const facing = new THREE.Vector3(0,0,1).applyQuaternion(this.mesh.quaternion);
-                if (facing.dot(toTarget) > 0.5) { // ~60 degree cone
-                    // Hit!
-                    // Calculate Damage based on Seff
-                    const damage = 10 * this.stats.sEff;
+                if (facing.dot(toTarget) > 0.5) { 
                     this.game.network.sendHit(remote.id, damage);
+                }
+            }
+        });
+
+        // Hit detection Monsters
+        this.game.monsters.forEach(monster => {
+            if (monster.dead) return;
+            const dist = this.mesh.position.distanceTo(monster.mesh.position);
+            if (dist < 3.0) {
+                const toTarget = monster.mesh.position.clone().sub(this.mesh.position).normalize();
+                const facing = new THREE.Vector3(0,0,1).applyQuaternion(this.mesh.quaternion);
+                if (facing.dot(toTarget) > 0.5) {
+                    // Hit Monster
+                    monster.takeDamage(damage);
+                    const hitSfx = new Audio('/sound_hit.mp3');
+                    hitSfx.play().catch(e=>{});
+                    
+                    // Push back
+                    if (this.game.network.isHost) {
+                        monster.mesh.position.addScaledVector(toTarget, 1.0);
+                    }
                 }
             }
         });
