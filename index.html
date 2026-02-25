@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Vitality Loop</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #111; font-family: 'Courier New', monospace; color: #eee; user-select: none; }
+        #game-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        
+        /* UI Overlays */
+        .ui-layer { position: absolute; pointer-events: none; width: 100%; height: 100%; display: flex; flex-direction: column; }
+        .interactive { pointer-events: auto; }
+        
+        /* Lobby */
+        #lobby-screen { background: rgba(0,0,0,0.9); z-index: 10; align-items: center; justify-content: center; display: flex; flex-direction: column; gap: 20px; padding: 20px; text-align: center; }
+        h1 { color: #d33; text-transform: uppercase; letter-spacing: 5px; margin-bottom: 0; text-shadow: 0 0 10px #d00; }
+        .subtitle { color: #888; font-size: 0.8em; margin-bottom: 20px; }
+        .btn { background: #333; color: white; border: 1px solid #666; padding: 15px 30px; font-family: inherit; font-size: 1.2em; cursor: pointer; transition: 0.2s; min-width: 200px; }
+        .btn:hover { background: #d33; border-color: #f00; }
+        input { background: #222; border: 1px solid #444; color: white; padding: 10px; font-family: inherit; font-size: 1em; text-align: center; width: 250px; }
+        
+        /* HUD */
+        #hud { padding: 20px; display: none; justify-content: space-between; align-items: flex-start; }
+        .stat-box { background: rgba(0,0,0,0.5); padding: 10px; border-left: 3px solid #d33; }
+        .bar-container { width: 200px; height: 10px; background: #333; margin-top: 5px; position: relative; }
+        .bar-fill { height: 100%; width: 100%; transition: width 0.2s; }
+        #hp-bar { background: #d33; }
+        #xp-bar { background: #fa0; }
+        .stat-value { font-size: 0.8em; color: #aaa; margin-top: 2px; }
+        
+        /* Death Screen */
+        #death-screen { background: rgba(50, 0, 0, 0.9); z-index: 20; display: none; align-items: center; justify-content: center; flex-direction: column; }
+        .death-title { font-size: 3em; color: #f00; text-transform: uppercase; }
+
+        /* Mobile Controls */
+        #mobile-controls { position: absolute; bottom: 20px; width: 100%; height: 150px; pointer-events: none; display: none; }
+        #joystick-zone { position: absolute; bottom: 20px; left: 20px; width: 120px; height: 120px; pointer-events: auto; }
+        #action-btn { position: absolute; bottom: 40px; right: 40px; width: 80px; height: 80px; border-radius: 50%; background: rgba(200, 50, 50, 0.5); border: 2px solid #fff; pointer-events: auto; display: flex; align-items: center; justify-content: center; font-size: 24px; touch-action: manipulation; }
+        #action-btn:active { background: rgba(255, 50, 50, 0.8); }
+
+        #qr-display { margin-top: 10px; background: white; padding: 10px; display: none; }
+    </style>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://esm.sh/three@0.160.0",
+                "three/addons/": "https://esm.sh/three@0.160.0/examples/jsm/",
+                "peerjs": "https://esm.sh/peerjs@1.5.2?bundle-deps",
+                "nipplejs": "https://esm.sh/nipplejs@0.10.1",
+                "qrcode": "https://esm.sh/qrcode@1.5.3",
+                "simplex-noise": "https://esm.sh/simplex-noise@4.0.1"
+            }
+        }
+    </script>
+</head>
+<body>
+    <div id="game-container"></div>
+    
+    <!-- Lobby -->
+    <div id="lobby-screen" class="ui-layer interactive">
+        <h1>Vitality Loop</h1>
+        <div class="subtitle">Health is Skill. Death is Forgetting.</div>
+        
+        <button id="host-btn" class="btn">Host World</button>
+        <div style="display:flex; gap:10px; align-items: center;">
+            <input type="text" id="join-code" placeholder="Enter Host ID">
+            <button id="join-btn" class="btn" style="min-width: 100px;">Join</button>
+        </div>
+        
+        <div id="status-msg" style="color: #fa0; height: 20px;"></div>
+        <div id="qr-display"></div>
+        <div id="host-id-display" style="font-size: 1.2em; color: #fa0; user-select: text;"></div>
+    </div>
+
+    <!-- HUD -->
+    <div id="hud" class="ui-layer">
+        <div class="stat-box">
+            <div>VITALITY <span id="hp-text">100/100</span></div>
+            <div class="bar-container"><div id="hp-bar" class="bar-fill"></div></div>
+        </div>
+        <div class="stat-box" style="border-left-color: #fa0; text-align: right;">
+            <div>MASTERY <span id="lvl-text">Lvl 1</span></div>
+            <div class="stat-value">Eff: <span id="eff-lvl">1.0</span> | Base: <span id="base-lvl">1.0</span></div>
+            <div class="stat-value">Prestige Floor: <span id="prestige-lvl">1</span></div>
+        </div>
+    </div>
+
+    <!-- Death -->
+    <div id="death-screen" class="ui-layer interactive">
+        <div class="death-title">MORTAL FAILURE</div>
+        <p style="max-width: 600px; text-align: center; margin-bottom: 30px;">
+            Your lineage survives, but your memories have faded.<br>
+            Base Proficiency Reset to Prestige Level.
+        </p>
+        <button id="respawn-btn" class="btn">Rise Again</button>
+    </div>
+
+    <!-- Mobile -->
+    <div id="mobile-controls">
+        <div id="joystick-zone"></div>
+        <div id="action-btn">⚔️</div>
+    </div>
+
+    <script type="module" src="./src/main.js"></script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v8c78df7c7c0f484497ecbca7046644da1771523124516" integrity="sha512-8DS7rgIrAmghBFwoOTujcf6D9rXvH8xm8JQ1Ja01h9QX8EzXldiszufYa4IFfKdLUKTTrnSFXLDkUEOTrZQ8Qg==" data-cf-beacon='{"version":"2024.11.0","token":"4c6229722a6346bc8eb5cb0e5eae5d41","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+</body>
+</html>
